@@ -70,9 +70,8 @@
         <div class="slicer-bar-inner">
             <div class="slicer-group">
                 <label class="slicer-label" for="date-slicer">📅 Report Date</label>
-                <select class="slicer-select" id="date-slicer">
-                    <!-- Populated by JS -->
-                </select>
+                <input type="date" class="slicer-date-input" id="date-slicer">
+                <span class="slicer-hint" id="date-range-hint">Last 6 months</span>
             </div>
             <div class="slicer-group">
                 <label class="slicer-label" for="machine-slicer">⚙️ Machine</label>
@@ -387,7 +386,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="data.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="data.js?v=6"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

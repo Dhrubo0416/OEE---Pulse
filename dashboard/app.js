@@ -38,16 +38,10 @@ function initSlicers() {
 
     if (!dateSlicer || !machineSlicer) return;
 
-    // Populate date slicer with last 7 days
-    DashboardData.allDates.forEach((dateStr, i) => {
-        const opt = document.createElement('option');
-        opt.value = dateStr;
-        const dateObj = new Date(dateStr + 'T00:00:00');
-        const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        opt.textContent = i === 0 ? `${dayLabel} (Yesterday)` : dayLabel;
-        if (dateStr === DashboardData.activeDate) opt.selected = true;
-        dateSlicer.appendChild(opt);
-    });
+    // Configure date input: last 6 months to yesterday
+    dateSlicer.value = DashboardData.activeDate;
+    dateSlicer.max = DashboardData.reportDate; // Yesterday
+    dateSlicer.min = DashboardData.minDate;    // 6 months ago
 
     // Populate machine slicer
     DashboardData.machines.forEach(m => {
@@ -59,6 +53,7 @@ function initSlicers() {
 
     // Date change handler
     dateSlicer.addEventListener('change', () => {
+        if (!dateSlicer.value) return;
         DashboardData.applyFilters(dateSlicer.value, DashboardData.activeMachineId);
         refreshDashboard();
     });
@@ -72,9 +67,11 @@ function initSlicers() {
     // Reset button
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
-            dateSlicer.value = DashboardData.allDates[0]; // Yesterday
+            // Reset to yesterday + all machines
+            const yesterday = DashboardData.minDate ? dateSlicer.max : DashboardData.reportDate;
+            dateSlicer.value = dateSlicer.max;
             machineSlicer.value = 'all';
-            DashboardData.applyFilters(DashboardData.allDates[0], 'all');
+            DashboardData.applyFilters(dateSlicer.max, 'all');
             refreshDashboard();
         });
     }
@@ -105,8 +102,12 @@ function updateLiveIndicator() {
     const indicator = document.getElementById('live-indicator-text');
     if (!indicator) return;
 
-    const yesterday = DashboardData.allDates[0];
-    if (DashboardData.activeDate === yesterday) {
+    // Check if the active date is yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    if (DashboardData.activeDate === yesterdayStr) {
         indicator.textContent = 'Yesterday';
     } else {
         const dateObj = new Date(DashboardData.activeDate + 'T00:00:00');

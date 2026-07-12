@@ -207,20 +207,32 @@ function getShift(hour) {
 }
 
 // ============================================================
-// 6. GENERATE PRODUCTION DATA FOR MULTIPLE DATES
+// 6. GENERATE PRODUCTION DATA — ON-DEMAND PER DATE
 // ============================================================
-function getDateRange(numDays = 7) {
-    const dates = [];
-    for (let i = 1; i <= numDays; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        dates.push(d.toISOString().split('T')[0]);
-    }
-    return dates; // Most recent first
+function getYesterdayDate() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
 }
 
-const ALL_DATES = getDateRange(7);
-const REPORT_DATE = ALL_DATES[0]; // Default: yesterday
+function getDateSixMonthsAgo() {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    return d.toISOString().split('T')[0];
+}
+
+const REPORT_DATE = getYesterdayDate();
+const MIN_DATE = getDateSixMonthsAgo();
+
+// Cache for generated day-data (keyed by date string)
+const _dataCache = {};
+
+function getOrGenerateDataForDate(dateStr) {
+    if (_dataCache[dateStr]) return _dataCache[dateStr];
+    const dayData = generateHourlyDataForDate(dateStr);
+    _dataCache[dateStr] = dayData;
+    return dayData;
+}
 
 function assignProductsToMachines() {
     // Each machine gets 2-4 products in a day (mold changes between them)
@@ -464,20 +476,6 @@ function generateHourlyDataForDate(dateStr) {
     return { productionPlan, productionActual, downtimeLog, correctiveActions, oeeHourly };
 }
 
-// Generate data for all dates and merge into single arrays
-function generateAllData() {
-    const all = { productionPlan: [], productionActual: [], downtimeLog: [], correctiveActions: [], oeeHourly: [] };
-    ALL_DATES.forEach(dateStr => {
-        const dayData = generateHourlyDataForDate(dateStr);
-        all.productionPlan.push(...dayData.productionPlan);
-        all.productionActual.push(...dayData.productionActual);
-        all.downtimeLog.push(...dayData.downtimeLog);
-        all.correctiveActions.push(...dayData.correctiveActions);
-        all.oeeHourly.push(...dayData.oeeHourly);
-    });
-    return all;
-}
-
 // ============================================================
 // 7. AGGREGATE / SUMMARY FUNCTIONS
 // ============================================================
@@ -584,56 +582,53 @@ function getHourlyTrend(oeeData) {
 }
 
 // ============================================================
-// 8. GENERATE & EXPORT ALL DATA
+// 8. BUILD DASHBOARD DATA (ON-DEMAND PER DATE)
 // ============================================================
-const generatedData = generateAllData();
+
+// Generate yesterday's data to boot the dashboard
+const _initialData = getOrGenerateDataForDate(REPORT_DATE);
 
 const DashboardData = {
     reportDate: REPORT_DATE,
-    allDates: ALL_DATES,
+    minDate: MIN_DATE,
     machines: MACHINES,
     products: PRODUCTS,
     shifts: SHIFTS,
-    
-    // Full (unfiltered) datasets
-    _allProductionPlan: generatedData.productionPlan,
-    _allProductionActual: generatedData.productionActual,
-    _allDowntimeLog: generatedData.downtimeLog,
-    _allCorrectiveActions: generatedData.correctiveActions,
-    _allOeeHourly: generatedData.oeeHourly,
 
     // Active filter state
     activeDate: REPORT_DATE,
-    activeMachineId: 'all', // 'all' or a specific machine ID
+    activeMachineId: 'all',
 
-    // Filtered views (initialized for yesterday + all machines)
-    productionPlan: generatedData.productionPlan.filter(r => r.date === REPORT_DATE),
-    productionActual: generatedData.productionActual.filter(r => r.date === REPORT_DATE),
-    downtimeLog: generatedData.downtimeLog.filter(r => r.date === REPORT_DATE),
-    correctiveActions: generatedData.correctiveActions.filter(r => r.date === REPORT_DATE),
-    oeeHourly: generatedData.oeeHourly.filter(r => r.date === REPORT_DATE),
-    
-    // Pre-calculated summaries (will be recalculated on filter change)
+    // Filtered views (will be set by applyFilters)
+    productionPlan: [],
+    productionActual: [],
+    downtimeLog: [],
+    correctiveActions: [],
+    oeeHourly: [],
+
+    // Pre-calculated summaries
     overallOEE: null,
     machineSummary: null,
     downtimePareto: null,
     departmentSummary: null,
     hourlyTrend: null,
 
-    // Apply filters and recalculate summaries
+    // Apply filters: generates data on-demand for the selected date
     applyFilters: function(date, machineId) {
         this.activeDate = date || this.activeDate;
         this.activeMachineId = machineId || this.activeMachineId;
         this.reportDate = this.activeDate;
 
-        // Filter by date first
-        let oee = this._allOeeHourly.filter(r => r.date === this.activeDate);
-        let prod = this._allProductionActual.filter(r => r.date === this.activeDate);
-        let dt = this._allDowntimeLog.filter(r => r.date === this.activeDate);
-        let ca = this._allCorrectiveActions.filter(r => r.date === this.activeDate);
-        let pp = this._allProductionPlan.filter(r => r.date === this.activeDate);
+        // Generate (or retrieve from cache) data for this date
+        const dayData = getOrGenerateDataForDate(this.activeDate);
 
-        // Then filter by machine if not 'all'
+        let oee = dayData.oeeHourly;
+        let prod = dayData.productionActual;
+        let dt = dayData.downtimeLog;
+        let ca = dayData.correctiveActions;
+        let pp = dayData.productionPlan;
+
+        // Filter by machine if not 'all'
         if (this.activeMachineId !== 'all') {
             oee = oee.filter(r => r.machineId === this.activeMachineId);
             prod = prod.filter(r => r.machineId === this.activeMachineId);
@@ -655,7 +650,7 @@ const DashboardData = {
         this.departmentSummary = getDepartmentSummary(dt);
         this.hourlyTrend = getHourlyTrend(oee);
     },
-    
+
     // Helper functions
     getShift: getShift,
     getMachineHourlyOEE: function(machineId) {
@@ -672,7 +667,7 @@ const DashboardData = {
     },
 };
 
-// Initialize summaries for the default view (yesterday, all machines)
+// Initialize with yesterday's data
 DashboardData.applyFilters(REPORT_DATE, 'all');
 
 // CSV Export helper
