@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="OEE & Downtime Monitoring Dashboard for 13 Injection Molding Machines - Real-time production analytics with hourly OEE tracking, downtime analysis, and corrective action logs.">
+    <title>OEE Dashboard — Injection Molding Plant</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <div class="loading-text">Initializing OEE Dashboard</div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="custom-tooltip"></div>
+
+    <!-- ============================================================
+         HEADER
+         ============================================================ -->
+    <header class="dashboard-header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1 class="header-title"><span class="accent">OEE</span> & Downtime Monitor</h1>
+                <div class="header-subtitle">
+                    Injection Molding Plant · Daily Production Report · <span id="report-date">—</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-meta">
+                    <div class="meta-item">
+                        <span class="icon">⚙️</span>
+                        <span>Machines:</span>
+                        <span class="value" id="machine-count">13</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="icon">📦</span>
+                        <span>Products:</span>
+                        <span class="value" id="product-count">—</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="icon">🕐</span>
+                        <span class="value" id="live-clock">--:--:--</span>
+                    </div>
+                </div>
+                <div class="shift-tabs">
+                    <button class="shift-tab active" data-shift="all">All Shifts</button>
+                    <button class="shift-tab" data-shift="Night">Night</button>
+                    <button class="shift-tab" data-shift="Morning">Morning</button>
+                    <button class="shift-tab" data-shift="Evening">Evening</button>
+                </div>
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    Yesterday
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============================================================
+         MAIN CONTENT
+         ============================================================ -->
+    <main class="dashboard-main">
+
+        <!-- ========== KPI CARDS ========== -->
+        <section class="kpi-row">
+            <div class="kpi-card animate-fade-up stagger-1" id="kpi-oee-card">
+                <div class="kpi-label">Overall OEE</div>
+                <div class="kpi-value green" id="kpi-oee">—<span class="unit">%</span></div>
+                <span class="kpi-change positive" id="kpi-target-badge">—</span>
+            </div>
+            <div class="kpi-card animate-fade-up stagger-2">
+                <div class="kpi-label">Availability</div>
+                <div class="kpi-value green" id="kpi-availability">—<span class="unit">%</span></div>
+                <span class="kpi-change positive">⏱ Uptime Ratio</span>
+            </div>
+            <div class="kpi-card animate-fade-up stagger-3">
+                <div class="kpi-label">Performance</div>
+                <div class="kpi-value green" id="kpi-performance">—<span class="unit">%</span></div>
+                <span class="kpi-change positive">⚡ Speed Ratio</span>
+            </div>
+            <div class="kpi-card animate-fade-up stagger-4">
+                <div class="kpi-label">Quality</div>
+                <div class="kpi-value green" id="kpi-quality">—<span class="unit">%</span></div>
+                <span class="kpi-change positive">✓ First Pass Yield</span>
+            </div>
+            <div class="kpi-card red animate-fade-up stagger-5">
+                <div class="kpi-label">Total Downtime</div>
+                <div class="kpi-value red" id="kpi-downtime">—</div>
+                <span class="kpi-change negative">⚠ All Machines</span>
+            </div>
+            <div class="kpi-card animate-fade-up stagger-6">
+                <div class="kpi-label">Good Parts Produced</div>
+                <div class="kpi-value green" id="kpi-production">—</div>
+                <div style="display:flex;gap:var(--gap-sm);align-items:center;margin-top:4px">
+                    <span style="font-size:0.68rem;color:var(--text-muted)">Plan: <span class="font-mono num-green" id="kpi-planned">—</span></span>
+                    <span style="font-size:0.68rem;color:var(--text-muted)">Rej: <span class="font-mono num-red" id="kpi-rejected">—</span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== OEE HEATMAP ========== -->
+        <section class="panel animate-fade-up">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Hourly OEE Heatmap — All Machines</div>
+                    <div class="panel-subtitle">Click any cell for machine detail · Click machine name for full breakdown</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:var(--gap-md)">
+                    <div class="heatmap-legend">
+                        <div class="legend-item"><span class="legend-color excellent"></span> &gt;80%</div>
+                        <div class="legend-item"><span class="legend-color good"></span> 65-80%</div>
+                        <div class="legend-item"><span class="legend-color fair"></span> 50-65%</div>
+                        <div class="legend-item"><span class="legend-color poor"></span> 35-50%</div>
+                        <div class="legend-item"><span class="legend-color critical"></span> &lt;35%</div>
+                    </div>
+                    <button class="export-btn" data-export="oeeHourly">📥 Export CSV</button>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="heatmap-container">
+                    <table class="heatmap-table">
+                        <thead>
+                            <tr id="heatmap-hours"></tr>
+                        </thead>
+                        <tbody id="heatmap-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== TREND + PARETO ROW ========== -->
+        <section class="grid-2">
+            <!-- Hourly OEE Trend -->
+            <div class="panel animate-fade-up">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Hourly OEE Trend — Plant Average</div>
+                        <div class="panel-subtitle">Availability · Performance · Quality · OEE composite</div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="chart-container" style="height:280px">
+                        <canvas id="oee-trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Downtime Pareto -->
+            <div class="panel animate-fade-up">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Downtime Pareto — By Category</div>
+                        <div class="panel-subtitle">Top downtime contributors across all machines</div>
+                    </div>
+                    <button class="export-btn" data-export="downtimeLog">📥 Export</button>
+                </div>
+                <div class="panel-body" id="downtime-pareto">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== DEPARTMENT BREAKDOWN + TIMELINE ========== -->
+        <section class="grid-2">
+            <!-- Department Donut -->
+            <div class="panel animate-fade-up">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Downtime by Department</div>
+                        <div class="panel-subtitle">Maintenance · Production · Quality responsibility split</div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="donut-container">
+                        <div class="donut-chart">
+                            <canvas id="dept-donut-chart" style="width:160px;height:160px"></canvas>
+                            <div class="donut-center">
+                                <div class="donut-center-value" id="donut-center-value">—</div>
+                                <div class="donut-center-label" id="donut-center-label">TOTAL MIN</div>
+                            </div>
+                        </div>
+                        <div class="donut-legend" id="dept-legend">
+                            <!-- Generated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Actions Timeline -->
+            <div class="panel animate-fade-up">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Key Corrective Actions Timeline</div>
+                        <div class="panel-subtitle">Top impact actions sorted by time · Most significant resolutions</div>
+                    </div>
+                </div>
+                <div class="panel-body" style="max-height:340px;overflow-y:auto">
+                    <div id="actions-timeline" class="timeline">
+                        <!-- Generated by JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== MACHINE PERFORMANCE TABLE ========== -->
+        <section class="panel animate-fade-up">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Machine Performance Summary</div>
+                    <div class="panel-subtitle">Click column headers to sort · Click any row for detailed breakdown</div>
+                </div>
+                <div style="display:flex;gap:var(--gap-sm)">
+                    <button class="export-btn" data-export="productionActual">📥 Production CSV</button>
+                    <button class="export-btn" data-export="machines">📥 Machines CSV</button>
+                </div>
+            </div>
+            <div class="panel-body" style="padding:0">
+                <table class="machine-table" id="machine-perf-table">
+                    <thead>
+                        <tr>
+                            <th data-sort="machineName">Machine</th>
+                            <th data-sort="oee" class="sorted">OEE %</th>
+                            <th data-sort="availability">Avail %</th>
+                            <th data-sort="performance">Perf %</th>
+                            <th data-sort="quality">Qual %</th>
+                            <th data-sort="totalDowntimeMin">Downtime</th>
+                            <th data-sort="totalGood">Good Parts</th>
+                            <th>Fulfillment</th>
+                        </tr>
+                    </thead>
+                    <tbody id="machine-table-body">
+                        <!-- Generated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ========== CORRECTIVE ACTIONS LOG ========== -->
+        <section class="panel animate-fade-up">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Corrective Actions Log</div>
+                    <div class="panel-subtitle">Department-wise breakdown of actions taken to resolve OEE% reduction</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:var(--gap-md)">
+                    <div class="filter-row">
+                        <button class="dept-filter-btn filter-btn active" data-dept="all">All Depts</button>
+                        <button class="dept-filter-btn filter-btn" data-dept="Maintenance">🔧 Maintenance</button>
+                        <button class="dept-filter-btn filter-btn" data-dept="Production">🏭 Production</button>
+                        <button class="dept-filter-btn filter-btn" data-dept="Quality">🔍 Quality</button>
+                    </div>
+                    <span style="font-size:0.72rem;color:var(--text-muted)" id="actions-count">—</span>
+                    <button class="export-btn" data-export="correctiveActions">📥 Export</button>
+                </div>
+            </div>
+            <div class="panel-body" style="padding:0;max-height:500px;overflow-y:auto">
+                <table class="actions-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Machine</th>
+                            <th>Department</th>
+                            <th>Category</th>
+                            <th>Downtime Reason</th>
+                            <th>Action Taken</th>
+                            <th>Description</th>
+                            <th>Resolution</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="actions-table-body">
+                        <!-- Generated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ========== FOOTER ========== -->
+        <footer style="text-align:center;padding:var(--gap-xl) 0;border-top:1px solid var(--border-subtle)">
+            <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em">
+                OEE & Downtime Monitoring System · Injection Molding Division · Synthetic Data Dashboard
+            </div>
+            <div style="font-size:0.65rem;color:var(--text-disabled);margin-top:var(--gap-xs)">
+                Data generated for demonstration · All 7 CSV datasets available for Power BI import
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- ============================================================
+         MACHINE DETAIL MODAL
+         ============================================================ -->
+    <div id="machine-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="modal-machine-title">—</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px" id="modal-machine-info">—</div>
+                </div>
+                <button class="modal-close" id="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- Machine KPIs -->
+                <div class="gauge-row">
+                    <div class="mini-gauge">
+                        <div class="mini-gauge-value" id="modal-oee">—</div>
+                        <div class="mini-gauge-label">OEE</div>
+                    </div>
+                    <div class="mini-gauge">
+                        <div class="mini-gauge-value" id="modal-availability">—</div>
+                        <div class="mini-gauge-label">Availability</div>
+                    </div>
+                    <div class="mini-gauge">
+                        <div class="mini-gauge-value" id="modal-performance">—</div>
+                        <div class="mini-gauge-label">Performance</div>
+                    </div>
+                    <div class="mini-gauge">
+                        <div class="mini-gauge-value" id="modal-quality">—</div>
+                        <div class="mini-gauge-label">Quality</div>
+                    </div>
+                </div>
+
+                <!-- Hourly OEE Chart -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Hourly OEE & Downtime</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="chart-container" style="height:250px">
+                            <canvas id="modal-oee-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Downtime Events -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Downtime Events</div>
+                        <span class="panel-badge red">Detail Log</span>
+                    </div>
+                    <div class="panel-body" style="padding:0;max-height:300px;overflow-y:auto" id="modal-downtimes">
+                        <!-- Generated by JS -->
+                    </div>
+                </div>
+
+                <!-- Corrective Actions -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Corrective Actions</div>
+                        <span class="panel-badge green">Resolution Log</span>
+                    </div>
+                    <div class="panel-body" style="max-height:300px;overflow-y:auto" id="modal-actions">
+                        <!-- Generated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="data.js?v=4"></script>
+    <script src="app.js?v=4"></script>
+</body>
+</html>

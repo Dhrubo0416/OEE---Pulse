@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Data Exporter — OEE Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0a0a0a; color: #f0f0f0; padding: 40px; }
+        h1 { color: #00ff88; margin-bottom: 10px; }
+        p { color: #999; margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .card {
+            background: #141414; border: 1px solid #222; border-radius: 12px; padding: 24px;
+            transition: all 0.2s;
+        }
+        .card:hover { border-color: #00ff88; transform: translateY(-2px); }
+        .card h3 { color: #00ff88; margin-bottom: 8px; font-size: 14px; }
+        .card p { color: #888; font-size: 12px; margin-bottom: 16px; }
+        .card .count { font-family: monospace; color: #ffaa00; font-size: 12px; margin-bottom: 12px; }
+        button {
+            background: rgba(0,255,136,0.1); color: #00ff88; border: 1px solid rgba(0,255,136,0.3);
+            padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: 600;
+            transition: all 0.2s; font-size: 13px; width: 100%;
+        }
+        button:hover { background: #00ff88; color: #0a0a0a; }
+        .download-all {
+            margin-top: 30px; padding: 14px 40px; font-size: 16px; width: auto;
+            background: #00ff88; color: #0a0a0a; border: none; border-radius: 8px;
+        }
+        .download-all:hover { background: #00cc6a; }
+        .status { color: #00ff88; font-size: 13px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>📊 OEE Dashboard — CSV Data Exporter</h1>
+    <p>Generate and download all synthetic datasets for Power BI import. Click individual buttons or "Download All" to get a complete dataset.</p>
+
+    <div class="grid" id="export-grid"></div>
+
+    <div style="text-align:center;margin-top:30px">
+        <button class="download-all" onclick="downloadAll()">⬇️ Download All CSV Files</button>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script src="data.js?v=3"></script>
+    <script>
+        const exports = [
+            { key: 'machines', title: 'Machines Master', desc: '13 Injection Molding machines with specs (tonnage, type, location, year)' },
+            { key: 'products', title: 'Products & Molds', desc: '~230 products across 8 categories with cycle times, cavities, and material specs' },
+            { key: 'productionPlan', title: 'Production Plan', desc: 'Hourly production plan for all machines (24h × 13 machines)' },
+            { key: 'productionActual', title: 'Production Actual', desc: 'Actual hourly production data with planned vs actual quantities' },
+            { key: 'downtimeLog', title: 'Downtime Log', desc: 'All downtime events with categories, reasons, and department responsibility' },
+            { key: 'correctiveActions', title: 'Corrective Actions', desc: 'Department-wise corrective actions with resolution times and status' },
+            { key: 'oeeHourly', title: 'OEE Hourly', desc: 'Pre-calculated hourly OEE with Availability, Performance, Quality breakdown' },
+        ];
+
+        const counts = {
+            machines: DashboardData.machines.length,
+            products: DashboardData.products.length,
+            productionPlan: DashboardData.productionPlan.length,
+            productionActual: DashboardData.productionActual.length,
+            downtimeLog: DashboardData.downtimeLog.length,
+            correctiveActions: DashboardData.correctiveActions.length,
+            oeeHourly: DashboardData.oeeHourly.length,
+        };
+
+        const grid = document.getElementById('export-grid');
+        exports.forEach(exp => {
+            grid.innerHTML += `
+                <div class="card">
+                    <h3>${exp.title}</h3>
+                    <div class="count">${counts[exp.key]} rows</div>
+                    <p>${exp.desc}</p>
+                    <button onclick="downloadSingle('${exp.key}', '${exp.title}')">📥 Download ${exp.key}.csv</button>
+                </div>
+            `;
+        });
+
+        function downloadSingle(key, title) {
+            const csv = DashboardData.exportCSV[key]();
+            downloadCSV(csv, `${key}_${DashboardData.reportDate}.csv`);
+            document.getElementById('status').textContent = `✅ Downloaded ${title}`;
+        }
+
+        function downloadAll() {
+            exports.forEach((exp, i) => {
+                setTimeout(() => {
+                    downloadSingle(exp.key, exp.title);
+                }, i * 300);
+            });
+            setTimeout(() => {
+                document.getElementById('status').textContent = '✅ All 7 CSV files downloaded successfully!';
+            }, exports.length * 300 + 200);
+        }
+
+        function downloadCSV(csvContent, filename) {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+    </script>
+</body>
+</html>
