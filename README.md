@@ -1,6 +1,10 @@
 # 🏭 OEE & Downtime Monitoring Dashboard
 ### Injection Molding Plant — 13 Machines · Daily Production Analytics
 
+🚀 **[Click Here for Live Interactive Dashboard](https://Dhrubo0416.github.io/OEE---Pulse/dashboard/)** 🚀
+
+> **Note:** The dashboard is fully interactive. You can use the slicers, shift tabs, and click on individual machines to drill down into the data. Because it is hosted via GitHub Pages, anyone with the link can view and interact with it, but only authorized users can edit the source code.
+
 ---
 
 ## Overview
