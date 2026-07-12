@@ -207,15 +207,20 @@ function getShift(hour) {
 }
 
 // ============================================================
-// 6. GENERATE PRODUCTION DATA FOR YESTERDAY
+// 6. GENERATE PRODUCTION DATA FOR MULTIPLE DATES
 // ============================================================
-function getYesterdayDate() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+function getDateRange(numDays = 7) {
+    const dates = [];
+    for (let i = 1; i <= numDays; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates; // Most recent first
 }
 
-const REPORT_DATE = getYesterdayDate();
+const ALL_DATES = getDateRange(7);
+const REPORT_DATE = ALL_DATES[0]; // Default: yesterday
 
 function assignProductsToMachines() {
     // Each machine gets 2-4 products in a day (mold changes between them)
@@ -237,7 +242,10 @@ function assignProductsToMachines() {
     return assignments;
 }
 
-function generateHourlyData() {
+function generateHourlyDataForDate(dateStr) {
+    // Use a different seed per date for variety
+    const dateSeed = dateStr.split('-').reduce((s, p) => s + parseInt(p), 0);
+    const dateRng = new SeededRandom(dateSeed * 137 + 2026);
     const machineProducts = assignProductsToMachines();
     const productionPlan = [];
     const productionActual = [];
@@ -274,7 +282,7 @@ function generateHourlyData() {
             const plannedQty = product.targetPerHour;
             productionPlan.push({
                 planId: `PLN-${String(planId++).padStart(5, '0')}`,
-                date: REPORT_DATE,
+                date: dateStr,
                 machineId: machine.id,
                 machineName: machine.name,
                 hour: hour,
@@ -297,8 +305,8 @@ function generateHourlyData() {
             if (moldChangeHours.includes(hour)) {
                 const cat = 'Mold Change';
                 const catData = DOWNTIME_CATEGORIES[cat];
-                const reasonIdx = rng.nextInt(0, catData.reasons.length - 1);
-                const duration = catData.avgDuration[reasonIdx] + rng.nextInt(-5, 15);
+                const reasonIdx = dateRng.nextInt(0, catData.reasons.length - 1);
+                const duration = catData.avgDuration[reasonIdx] + dateRng.nextInt(-5, 15);
                 const dtDuration = Math.min(duration, 55); // Cap at 55 min to leave some production
                 
                 hourDowntimes.push({
@@ -315,9 +323,9 @@ function generateHourlyData() {
                 if (cat === 'Mold Change') return; // Already handled
                 
                 const threshold = catData.frequency * reliabilityFactor;
-                if (rng.next() < threshold && totalDowntimeMin < 45) {
-                    const reasonIdx = rng.nextInt(0, catData.reasons.length - 1);
-                    let duration = catData.avgDuration[reasonIdx] + rng.nextInt(-8, 10);
+                if (dateRng.next() < threshold && totalDowntimeMin < 45) {
+                    const reasonIdx = dateRng.nextInt(0, catData.reasons.length - 1);
+                    let duration = catData.avgDuration[reasonIdx] + dateRng.nextInt(-8, 10);
                     duration = Math.max(5, Math.min(duration, 50 - totalDowntimeMin));
                     
                     if (duration > 0 && totalDowntimeMin + duration <= 55) {
@@ -335,15 +343,15 @@ function generateHourlyData() {
             // Record downtimes
             const hourDowntimeIds = [];
             hourDowntimes.forEach(dt => {
-                const dtId = `DT-${String(downtimeId++).padStart(5, '0')}`;
+                const dtId = `DT-${dateStr}-${String(downtimeId++).padStart(5, '0')}`;
                 hourDowntimeIds.push(dtId);
                 
-                const startMin = rng.nextInt(0, Math.max(0, 59 - dt.duration));
+                const startMin = dateRng.nextInt(0, Math.max(0, 59 - dt.duration));
                 const endMin = Math.min(startMin + dt.duration, 59);
                 
                 downtimeLog.push({
                     downtimeId: dtId,
-                    date: REPORT_DATE,
+                    date: dateStr,
                     machineId: machine.id,
                     machineName: machine.name,
                     hour: hour,
@@ -361,14 +369,14 @@ function generateHourlyData() {
                 
                 // Generate corrective action for this downtime
                 const deptActions = CORRECTIVE_ACTIONS_TEMPLATES[dt.department];
-                const actionTemplate = rng.pick(deptActions);
-                const description = rng.pick(actionTemplate.descriptions);
-                const resolutionTime = dt.duration + rng.nextInt(-5, 10);
+                const actionTemplate = dateRng.pick(deptActions);
+                const description = dateRng.pick(actionTemplate.descriptions);
+                const resolutionTime = dt.duration + dateRng.nextInt(-5, 10);
                 
                 correctiveActions.push({
-                    actionId: `ACT-${String(actionId++).padStart(5, '0')}`,
+                    actionId: `ACT-${dateStr}-${String(actionId++).padStart(5, '0')}`,
                     downtimeId: dtId,
-                    date: REPORT_DATE,
+                    date: dateStr,
                     machineId: machine.id,
                     machineName: machine.name,
                     hour: hour,
@@ -380,7 +388,7 @@ function generateHourlyData() {
                     actionTaken: actionTemplate.action,
                     description: description,
                     resolutionMin: Math.max(5, resolutionTime),
-                    status: rng.next() > 0.1 ? 'Resolved' : 'Pending',
+                    status: dateRng.next() > 0.1 ? 'Resolved' : 'Pending',
                 });
             });
             
@@ -391,12 +399,12 @@ function generateHourlyData() {
             
             // Performance: actual vs theoretical output during running time
             const theoreticalOutput = Math.floor((runningTime / 60) * product.targetPerHour);
-            const performanceFactor = rng.nextFloat(0.80, 0.98) * reliabilityFactor;
+            const performanceFactor = dateRng.nextFloat(0.80, 0.98) * reliabilityFactor;
             const actualQty = Math.max(0, Math.floor(theoreticalOutput * performanceFactor));
             const performance = theoreticalOutput > 0 ? (actualQty / theoreticalOutput) * 100 : 0;
             
             // Quality: good parts vs total
-            const rejectRate = rng.nextFloat(0.005, 0.04);
+            const rejectRate = dateRng.nextFloat(0.005, 0.04);
             const rejectedQty = Math.floor(actualQty * rejectRate);
             const goodQty = actualQty - rejectedQty;
             const quality = actualQty > 0 ? (goodQty / actualQty) * 100 : 0;
@@ -406,8 +414,8 @@ function generateHourlyData() {
             
             // Production actual record
             productionActual.push({
-                recordId: `REC-${String(recordId++).padStart(5, '0')}`,
-                date: REPORT_DATE,
+                recordId: `REC-${dateStr}-${String(recordId++).padStart(5, '0')}`,
+                date: dateStr,
                 machineId: machine.id,
                 machineName: machine.name,
                 hour: hour,
@@ -429,7 +437,7 @@ function generateHourlyData() {
             
             // OEE hourly record
             oeeHourly.push({
-                date: REPORT_DATE,
+                date: dateStr,
                 machineId: machine.id,
                 machineName: machine.name,
                 hour: hour,
@@ -454,6 +462,20 @@ function generateHourlyData() {
     });
     
     return { productionPlan, productionActual, downtimeLog, correctiveActions, oeeHourly };
+}
+
+// Generate data for all dates and merge into single arrays
+function generateAllData() {
+    const all = { productionPlan: [], productionActual: [], downtimeLog: [], correctiveActions: [], oeeHourly: [] };
+    ALL_DATES.forEach(dateStr => {
+        const dayData = generateHourlyDataForDate(dateStr);
+        all.productionPlan.push(...dayData.productionPlan);
+        all.productionActual.push(...dayData.productionActual);
+        all.downtimeLog.push(...dayData.downtimeLog);
+        all.correctiveActions.push(...dayData.correctiveActions);
+        all.oeeHourly.push(...dayData.oeeHourly);
+    });
+    return all;
 }
 
 // ============================================================
@@ -564,25 +586,75 @@ function getHourlyTrend(oeeData) {
 // ============================================================
 // 8. GENERATE & EXPORT ALL DATA
 // ============================================================
-const generatedData = generateHourlyData();
+const generatedData = generateAllData();
 
 const DashboardData = {
     reportDate: REPORT_DATE,
+    allDates: ALL_DATES,
     machines: MACHINES,
     products: PRODUCTS,
     shifts: SHIFTS,
-    productionPlan: generatedData.productionPlan,
-    productionActual: generatedData.productionActual,
-    downtimeLog: generatedData.downtimeLog,
-    correctiveActions: generatedData.correctiveActions,
-    oeeHourly: generatedData.oeeHourly,
     
-    // Pre-calculated summaries
-    overallOEE: calculateOverallOEE(generatedData.oeeHourly),
-    machineSummary: getMachineSummary(generatedData.oeeHourly),
-    downtimePareto: getDowntimePareto(generatedData.downtimeLog),
-    departmentSummary: getDepartmentSummary(generatedData.downtimeLog),
-    hourlyTrend: getHourlyTrend(generatedData.oeeHourly),
+    // Full (unfiltered) datasets
+    _allProductionPlan: generatedData.productionPlan,
+    _allProductionActual: generatedData.productionActual,
+    _allDowntimeLog: generatedData.downtimeLog,
+    _allCorrectiveActions: generatedData.correctiveActions,
+    _allOeeHourly: generatedData.oeeHourly,
+
+    // Active filter state
+    activeDate: REPORT_DATE,
+    activeMachineId: 'all', // 'all' or a specific machine ID
+
+    // Filtered views (initialized for yesterday + all machines)
+    productionPlan: generatedData.productionPlan.filter(r => r.date === REPORT_DATE),
+    productionActual: generatedData.productionActual.filter(r => r.date === REPORT_DATE),
+    downtimeLog: generatedData.downtimeLog.filter(r => r.date === REPORT_DATE),
+    correctiveActions: generatedData.correctiveActions.filter(r => r.date === REPORT_DATE),
+    oeeHourly: generatedData.oeeHourly.filter(r => r.date === REPORT_DATE),
+    
+    // Pre-calculated summaries (will be recalculated on filter change)
+    overallOEE: null,
+    machineSummary: null,
+    downtimePareto: null,
+    departmentSummary: null,
+    hourlyTrend: null,
+
+    // Apply filters and recalculate summaries
+    applyFilters: function(date, machineId) {
+        this.activeDate = date || this.activeDate;
+        this.activeMachineId = machineId || this.activeMachineId;
+        this.reportDate = this.activeDate;
+
+        // Filter by date first
+        let oee = this._allOeeHourly.filter(r => r.date === this.activeDate);
+        let prod = this._allProductionActual.filter(r => r.date === this.activeDate);
+        let dt = this._allDowntimeLog.filter(r => r.date === this.activeDate);
+        let ca = this._allCorrectiveActions.filter(r => r.date === this.activeDate);
+        let pp = this._allProductionPlan.filter(r => r.date === this.activeDate);
+
+        // Then filter by machine if not 'all'
+        if (this.activeMachineId !== 'all') {
+            oee = oee.filter(r => r.machineId === this.activeMachineId);
+            prod = prod.filter(r => r.machineId === this.activeMachineId);
+            dt = dt.filter(r => r.machineId === this.activeMachineId);
+            ca = ca.filter(r => r.machineId === this.activeMachineId);
+            pp = pp.filter(r => r.machineId === this.activeMachineId);
+        }
+
+        this.oeeHourly = oee;
+        this.productionActual = prod;
+        this.downtimeLog = dt;
+        this.correctiveActions = ca;
+        this.productionPlan = pp;
+
+        // Recalculate summaries
+        this.overallOEE = oee.length > 0 ? calculateOverallOEE(oee) : { availability: 0, performance: 0, quality: 0, oee: 0 };
+        this.machineSummary = getMachineSummary(oee);
+        this.downtimePareto = getDowntimePareto(dt);
+        this.departmentSummary = getDepartmentSummary(dt);
+        this.hourlyTrend = getHourlyTrend(oee);
+    },
     
     // Helper functions
     getShift: getShift,
@@ -600,6 +672,9 @@ const DashboardData = {
     },
 };
 
+// Initialize summaries for the default view (yesterday, all machines)
+DashboardData.applyFilters(REPORT_DATE, 'all');
+
 // CSV Export helper
 function toCSV(data, columns) {
     const header = columns.join(',');
@@ -616,9 +691,9 @@ function toCSV(data, columns) {
 DashboardData.exportCSV = {
     machines: () => toCSV(MACHINES, ['id', 'name', 'tonnage', 'location', 'type', 'year']),
     products: () => toCSV(PRODUCTS, ['id', 'name', 'category', 'moldId', 'cycleTimeSec', 'cavities', 'targetPerHour', 'tonnageRequired', 'material', 'weight_g', 'color']),
-    productionPlan: () => toCSV(generatedData.productionPlan, ['planId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'productId', 'productName', 'category', 'moldId', 'plannedQty', 'cycleTimeSec', 'cavities']),
-    productionActual: () => toCSV(generatedData.productionActual, ['recordId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'productId', 'productName', 'category', 'plannedQty', 'actualQty', 'goodQty', 'rejectedQty', 'availableTimeMin', 'runningTimeMin', 'downtimeMin', 'plannedCycleTimeSec', 'actualCycleTimeSec']),
-    downtimeLog: () => toCSV(generatedData.downtimeLog, ['downtimeId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'startTime', 'endTime', 'durationMin', 'category', 'reason', 'department', 'productId', 'productName']),
-    correctiveActions: () => toCSV(generatedData.correctiveActions, ['actionId', 'downtimeId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'department', 'category', 'reason', 'actionTaken', 'description', 'resolutionMin', 'status']),
-    oeeHourly: () => toCSV(generatedData.oeeHourly, ['date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'availability', 'performance', 'quality', 'oee', 'plannedQty', 'actualQty', 'goodQty', 'rejectedQty', 'downtimeMin', 'runningTimeMin', 'downtimeCategories', 'downtimeReasons', 'productId', 'productName']),
+    productionPlan: () => toCSV(DashboardData.productionPlan, ['planId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'productId', 'productName', 'category', 'moldId', 'plannedQty', 'cycleTimeSec', 'cavities']),
+    productionActual: () => toCSV(DashboardData.productionActual, ['recordId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'productId', 'productName', 'category', 'plannedQty', 'actualQty', 'goodQty', 'rejectedQty', 'availableTimeMin', 'runningTimeMin', 'downtimeMin', 'plannedCycleTimeSec', 'actualCycleTimeSec']),
+    downtimeLog: () => toCSV(DashboardData.downtimeLog, ['downtimeId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'startTime', 'endTime', 'durationMin', 'category', 'reason', 'department', 'productId', 'productName']),
+    correctiveActions: () => toCSV(DashboardData.correctiveActions, ['actionId', 'downtimeId', 'date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'department', 'category', 'reason', 'actionTaken', 'description', 'resolutionMin', 'status']),
+    oeeHourly: () => toCSV(DashboardData.oeeHourly, ['date', 'machineId', 'machineName', 'hour', 'hourLabel', 'shift', 'availability', 'performance', 'quality', 'oee', 'plannedQty', 'actualQty', 'goodQty', 'rejectedQty', 'downtimeMin', 'runningTimeMin', 'downtimeCategories', 'downtimeReasons', 'productId', 'productName']),
 };

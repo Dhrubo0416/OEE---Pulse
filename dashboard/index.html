@@ -57,11 +57,33 @@
                 </div>
                 <div class="live-indicator">
                     <span class="live-dot"></span>
-                    Yesterday
+                    <span id="live-indicator-text">Yesterday</span>
                 </div>
             </div>
         </div>
     </header>
+
+    <!-- ============================================================
+         SLICER / FILTER BAR
+         ============================================================ -->
+    <section class="slicer-bar" id="slicer-bar">
+        <div class="slicer-bar-inner">
+            <div class="slicer-group">
+                <label class="slicer-label" for="date-slicer">📅 Report Date</label>
+                <select class="slicer-select" id="date-slicer">
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <div class="slicer-group">
+                <label class="slicer-label" for="machine-slicer">⚙️ Machine</label>
+                <select class="slicer-select" id="machine-slicer">
+                    <option value="all">All Machines (13)</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            <button class="slicer-reset-btn" id="slicer-reset" title="Reset all filters">↺ Reset</button>
+        </div>
+    </section>
 
     <!-- ============================================================
          MAIN CONTENT
@@ -365,7 +387,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="data.js?v=4"></script>
-    <script src="app.js?v=4"></script>
+    <script src="data.js?v=5"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

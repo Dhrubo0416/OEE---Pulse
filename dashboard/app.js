@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDashboard() {
+    initSlicers();
     updateHeader();
     renderKPICards();
     renderOEEHeatmap();
@@ -28,6 +29,92 @@ function initDashboard() {
 }
 
 // ============================================================
+// SLICERS (Date + Machine)
+// ============================================================
+function initSlicers() {
+    const dateSlicer = document.getElementById('date-slicer');
+    const machineSlicer = document.getElementById('machine-slicer');
+    const resetBtn = document.getElementById('slicer-reset');
+
+    if (!dateSlicer || !machineSlicer) return;
+
+    // Populate date slicer with last 7 days
+    DashboardData.allDates.forEach((dateStr, i) => {
+        const opt = document.createElement('option');
+        opt.value = dateStr;
+        const dateObj = new Date(dateStr + 'T00:00:00');
+        const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        opt.textContent = i === 0 ? `${dayLabel} (Yesterday)` : dayLabel;
+        if (dateStr === DashboardData.activeDate) opt.selected = true;
+        dateSlicer.appendChild(opt);
+    });
+
+    // Populate machine slicer
+    DashboardData.machines.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = `${m.id} — ${m.name}`;
+        machineSlicer.appendChild(opt);
+    });
+
+    // Date change handler
+    dateSlicer.addEventListener('change', () => {
+        DashboardData.applyFilters(dateSlicer.value, DashboardData.activeMachineId);
+        refreshDashboard();
+    });
+
+    // Machine change handler
+    machineSlicer.addEventListener('change', () => {
+        DashboardData.applyFilters(DashboardData.activeDate, machineSlicer.value);
+        refreshDashboard();
+    });
+
+    // Reset button
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            dateSlicer.value = DashboardData.allDates[0]; // Yesterday
+            machineSlicer.value = 'all';
+            DashboardData.applyFilters(DashboardData.allDates[0], 'all');
+            refreshDashboard();
+        });
+    }
+}
+
+function refreshDashboard() {
+    // Get current active shift tab
+    const activeShiftTab = document.querySelector('.shift-tab.active');
+    const activeShift = activeShiftTab ? activeShiftTab.dataset.shift : 'all';
+
+    // Get current active department filter
+    const activeDeptBtn = document.querySelector('.dept-filter-btn.active');
+    const activeDept = activeDeptBtn ? activeDeptBtn.dataset.dept : 'all';
+
+    updateHeader();
+    updateLiveIndicator();
+    renderKPICards();
+    renderOEEHeatmap(activeShift);
+    renderHourlyOEETrend(activeShift);
+    renderDowntimePareto();
+    renderDepartmentBreakdown();
+    renderMachinePerformanceTable();
+    renderCorrectiveActionsTable(activeDept);
+    renderActionsTimeline();
+}
+
+function updateLiveIndicator() {
+    const indicator = document.getElementById('live-indicator-text');
+    if (!indicator) return;
+
+    const yesterday = DashboardData.allDates[0];
+    if (DashboardData.activeDate === yesterday) {
+        indicator.textContent = 'Yesterday';
+    } else {
+        const dateObj = new Date(DashboardData.activeDate + 'T00:00:00');
+        indicator.textContent = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+}
+
+// ============================================================
 // HEADER
 // ============================================================
 function updateHeader() {
@@ -36,7 +123,10 @@ function updateHeader() {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     dateEl.textContent = dateObj.toLocaleDateString('en-US', options);
 
-    document.getElementById('machine-count').textContent = DashboardData.machines.length;
+    const machineCount = DashboardData.activeMachineId === 'all'
+        ? DashboardData.machines.length
+        : 1;
+    document.getElementById('machine-count').textContent = machineCount;
     document.getElementById('product-count').textContent = DashboardData.products.length;
 }
 
@@ -154,7 +244,11 @@ function renderOEEHeatmap(filterShift = 'all') {
     if (!container) return;
     container.innerHTML = '';
 
-    const machines = DashboardData.machines;
+    // Respect machine slicer
+    let machines = DashboardData.machines;
+    if (DashboardData.activeMachineId !== 'all') {
+        machines = machines.filter(m => m.id === DashboardData.activeMachineId);
+    }
     const oeeData = DashboardData.oeeHourly;
 
     let hours = [];
